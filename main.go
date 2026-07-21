@@ -43,6 +43,7 @@ func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
 	cfg.fileserveHits.Store(0)
 	w.WriteHeader(200)
 }
+
 func (cfg *apiConfig) validate_chirp(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	mychirpRequest := chirpRequest{}
@@ -66,7 +67,11 @@ func (cfg *apiConfig) validate_chirp(w http.ResponseWriter, r *http.Request) {
 		return
 
 	} else {
-		respBody := validResponse{Valid: true}
+		cleaned := cleanChirp(mychirpRequest.Body)
+		respBody := cleanedResponse{
+			CleanedBody: cleaned,
+		}
+
 		dat, err := json.Marshal(respBody)
 		if err != nil {
 			log.Printf("Error marshalling JSON: %s", err)
