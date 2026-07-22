@@ -1,1 +1,3 @@
-DB_URL = "postgres://nit:@localhost:5432/chirpy"
+.env
+chirpy
+out
