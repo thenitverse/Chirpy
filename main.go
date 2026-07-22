@@ -1,15 +1,22 @@
 package main
 
 import (
+	"chirpy/internal/database"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync/atomic"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserveHits atomic.Int32
+	db            *database.Queries
 }
 type chirpRequest struct {
 	Body string `json:"body"`
@@ -86,7 +93,17 @@ func (cfg *apiConfig) validate_chirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	myapiConfig := &apiConfig{}
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dbQueries := database.New(db)
+
+	myapiConfig := &apiConfig{
+		db: dbQueries,
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/app/", myapiConfig.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, r *http.Request) {
