@@ -17,6 +17,7 @@ import (
 type apiConfig struct {
 	fileserveHits atomic.Int32
 	db            *database.Queries
+	platform      string
 }
 type chirpRequest struct {
 	Body string `json:"body"`
@@ -47,8 +48,18 @@ func (cfg *apiConfig) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(msg))
 }
 func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+		w.WriteHeader(403)
+		return
+	}
+	err := cfg.db.DeleteUser(r.Context())
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
 	cfg.fileserveHits.Store(0)
 	w.WriteHeader(200)
+
 }
 
 func (cfg *apiConfig) validate_chirp(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +111,11 @@ func main() {
 		log.Fatal(err)
 	}
 	dbQueries := database.New(db)
+	platForm := os.Getenv("PLATFORM")
 
 	myapiConfig := &apiConfig{
-		db: dbQueries,
+		db:       dbQueries,
+		platform: platForm,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/app/", myapiConfig.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
@@ -114,7 +127,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", myapiConfig.handleMetrics)
 	mux.HandleFunc("POST /admin/reset", myapiConfig.handleReset)
 	mux.HandleFunc("POST /api/validate_chirp", myapiConfig.validate_chirp)
-
+	mux.HandleFunc("POST /api/users", myapiConfig.handlerUser)
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: mux,
