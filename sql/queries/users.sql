@@ -5,3 +5,5 @@ CURRENT_TIMESTAMP,
 CURRENT_TIMESTAMP,
 $1)
 RETURNING *;
+-- name: DeleteUser :exec
+DELETE FROM users;
