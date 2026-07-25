@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"sync/atomic"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -20,13 +23,21 @@ type apiConfig struct {
 	platform      string
 }
 type chirpRequest struct {
-	Body string `json:"body"`
+	Body    string    `json:"body"`
+	User_id uuid.UUID `json:"user_id"`
 }
 type validResponse struct {
 	Valid bool `json:"valid"`
 }
 type errorResponse struct {
 	Error string `json:"error"`
+}
+type Chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -62,7 +73,7 @@ func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (cfg *apiConfig) validate_chirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) chirps(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	mychirpRequest := chirpRequest{}
 	err := decoder.Decode(&mychirpRequest)
@@ -86,18 +97,31 @@ func (cfg *apiConfig) validate_chirp(w http.ResponseWriter, r *http.Request) {
 
 	} else {
 		cleaned := cleanChirp(mychirpRequest.Body)
-		respBody := cleanedResponse{
-			CleanedBody: cleaned,
+		chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
+			Body:   cleaned,
+			UserID: mychirpRequest.User_id,
+		})
+		if err != nil {
+			log.Printf("Error creating chirp: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		respChirp := Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
 		}
 
-		dat, err := json.Marshal(respBody)
+		dat, err := json.Marshal(respChirp)
 		if err != nil {
 			log.Printf("Error marshalling JSON: %s", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(201)
 		w.Write(dat)
 	}
 
@@ -126,8 +150,9 @@ func main() {
 	})
 	mux.HandleFunc("GET /admin/metrics", myapiConfig.handleMetrics)
 	mux.HandleFunc("POST /admin/reset", myapiConfig.handleReset)
-	mux.HandleFunc("POST /api/validate_chirp", myapiConfig.validate_chirp)
+	mux.HandleFunc("POST /api/chirps", myapiConfig.chirps)
 	mux.HandleFunc("POST /api/users", myapiConfig.handlerUser)
+	mux.HandleFunc("GET /api/chirps", myapiConfig.handlerGetChirps)
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: mux,
