@@ -175,6 +175,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", myapiConfig.UserLogin)
 	mux.HandleFunc("POST /api/refresh", myapiConfig.userRefresh)
 	mux.HandleFunc("POST /api/revoke", myapiConfig.userRevoke)
+	mux.HandleFunc("PUT /api/users", myapiConfig.updateUser)
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: mux,
