@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chirpy/internal/auth"
 	"chirpy/internal/database"
 	"database/sql"
 	"encoding/json"
@@ -21,10 +22,11 @@ type apiConfig struct {
 	fileserveHits atomic.Int32
 	db            *database.Queries
 	platform      string
+	jwtSecret     string
 }
 type chirpRequest struct {
-	Body    string    `json:"body"`
-	User_id uuid.UUID `json:"user_id"`
+	Body string `json:"body"`
+	//User_id uuid.UUID `json:"user_id"`
 }
 type validResponse struct {
 	Valid bool `json:"valid"`
@@ -74,9 +76,22 @@ func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) chirps(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Error in authentication: %s", err)
+		w.WriteHeader(401)
+		return
+	}
+
+	id, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		log.Printf("Error validating id: %s", err)
+		w.WriteHeader(401)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	mychirpRequest := chirpRequest{}
-	err := decoder.Decode(&mychirpRequest)
+	err = decoder.Decode(&mychirpRequest)
 	if err != nil {
 		log.Printf("Error decoding parameters: %s", err)
 		w.WriteHeader(500)
@@ -99,7 +114,7 @@ func (cfg *apiConfig) chirps(w http.ResponseWriter, r *http.Request) {
 		cleaned := cleanChirp(mychirpRequest.Body)
 		chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 			Body:   cleaned,
-			UserID: mychirpRequest.User_id,
+			UserID: id,
 		})
 		if err != nil {
 			log.Printf("Error creating chirp: %s", err)
@@ -128,6 +143,7 @@ func (cfg *apiConfig) chirps(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
@@ -136,10 +152,12 @@ func main() {
 	}
 	dbQueries := database.New(db)
 	platForm := os.Getenv("PLATFORM")
+	jwtSecret := os.Getenv("JWT_SECRET")
 
 	myapiConfig := &apiConfig{
-		db:       dbQueries,
-		platform: platForm,
+		db:        dbQueries,
+		platform:  platForm,
+		jwtSecret: jwtSecret,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/app/", myapiConfig.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
@@ -155,6 +173,8 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", myapiConfig.handlerGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", myapiConfig.handlerGetChirp)
 	mux.HandleFunc("POST /api/login", myapiConfig.UserLogin)
+	mux.HandleFunc("POST /api/refresh", myapiConfig.userRefresh)
+	mux.HandleFunc("POST /api/revoke", myapiConfig.userRevoke)
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: mux,
