@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chirpy/internal/auth"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -16,14 +17,26 @@ type webhookRequest struct {
 }
 
 func (cfg *apiConfig) webhookReq(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		w.WriteHeader(401)
+		return
+
+	}
+	polkaKey := cfg.polkaKey
+	if apiKey != polkaKey {
+		w.WriteHeader(401)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	myWebhook := &webhookRequest{}
-	err := decoder.Decode(myWebhook)
+	err = decoder.Decode(myWebhook)
 	if err != nil {
 		log.Printf("Error decoding parameters: %s", err)
 		w.WriteHeader(400)
 		return
 	}
+
 	if myWebhook.Event != "user.upgraded" {
 		w.WriteHeader(http.StatusNoContent)
 		return
