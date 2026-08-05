@@ -23,6 +23,7 @@ type apiConfig struct {
 	db            *database.Queries
 	platform      string
 	jwtSecret     string
+	polkaKey      string
 }
 type chirpRequest struct {
 	Body string `json:"body"`
@@ -153,11 +154,13 @@ func main() {
 	dbQueries := database.New(db)
 	platForm := os.Getenv("PLATFORM")
 	jwtSecret := os.Getenv("JWT_SECRET")
+	polkaKey := os.Getenv("POLKA_KEY")
 
 	myapiConfig := &apiConfig{
 		db:        dbQueries,
 		platform:  platForm,
 		jwtSecret: jwtSecret,
+		polkaKey:  polkaKey,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/app/", myapiConfig.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir(".")))))
