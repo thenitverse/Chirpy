@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chirpy/internal/database"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -11,12 +12,27 @@ import (
 )
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	reqChirp, err := cfg.db.GetChirps(r.Context())
+	authorIdStr := r.URL.Query().Get("author_id")
+	var reqChirp []database.Chirp
+	var err error
+	if authorIdStr == "" {
+		reqChirp, err = cfg.db.GetChirps(r.Context())
+	} else {
+		var val uuid.UUID
+		val, err = uuid.Parse(authorIdStr)
+		if err != nil {
+			log.Printf("Invalid UUID Parse: %s", err)
+			w.WriteHeader(400)
+			return
+		}
+		reqChirp, err = cfg.db.GetChirpsByAuthor(r.Context(), val)
+	}
 	if err != nil {
 		log.Printf("Error getting chirps: %s", err)
 		w.WriteHeader(500)
 		return
 	}
+
 	Chirps := []Chirp{}
 	for _, item := range reqChirp {
 		respChirp := Chirp{
@@ -41,6 +57,7 @@ func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
 
 }
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
+
 	id := r.PathValue("chirpID")
 	val, err := uuid.Parse(id)
 	if err != nil {
